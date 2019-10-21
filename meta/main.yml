@@ -1,7 +1,7 @@
 ---
 
 galaxy_info:
-  role_name: k8s_gitlab_runner
+  role_name: m7s_gitlab_runner
   author: 'Matias Ferrigno'
   description: 'Install gitlab runner on k8s'
   company: 'Mikroways'
