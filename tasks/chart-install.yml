@@ -1,0 +1,87 @@
+---
+
+- name: fail if state is not recognized
+  fail:
+    msg: "No se reconoce el estado: {{ instance.state }}"
+  when: 
+    - instance.state not in ["installed", "upgraded", "purged"]
+
+- name: check if namespace is being used
+  k8s_facts:
+    api_version: v1
+    kind: Namespace
+    name: "{{ instance.namespace }}"
+  register: namespace_output
+
+- name: debug
+  fail:
+    msg: "El namespace {{ instance.namespace }} ya existe."
+  when: (namespace_output.resources | length > 0) and instance.state == 'installed'
+
+- name: get chart
+  shell: helm fetch stable/gitlab-runner --version "{{ instance.version }}"
+  args:
+    chdir: /tmp/
+
+- name: ensure directory exists
+  file:
+    path: "/tmp/{{ instance.name }}"
+    state: directory
+
+- name: unarchive chart
+  unarchive:
+    src: "/tmp/{{ instance.name }}-{{ instance.version }}.tgz"
+    dest: "/tmp/{{ instance.name }}"
+    extra_opts: [--strip-components=1]
+    remote_src: yes
+
+- name: get default values.yaml
+  shell: cat /tmp/{{ instance.name }}/values.yaml | egrep -v "^\s*#"
+  register: values_original
+
+- name: combine values
+  set_fact:
+    values_modified: "{{ values_original.stdout | from_yaml | combine(instance.chart_values, recursive=True) }}"
+
+- name: delete original values.yaml
+  file:
+    path: /tmp/{{ instance.name }}/values.yaml
+    state: absent
+
+- name: replace values.yml
+  blockinfile:
+    path: /tmp/{{ instance.name }}/values.yaml
+    create: yes
+    block: "{{ values_modified | to_nice_yaml(width=80, indent=2) }}"
+
+- name: helm install
+  shell: helm install ./ --namespace "{{ instance.namespace }}" --name "{{ instance.name }}" -f ./values.yaml 
+  args:
+    chdir: /tmp/{{ instance.name }}/
+  when: instance.state == 'installed'
+
+- name: helm upgrade
+  shell: helm upgrade "{{ instance.name }}" ./ -f ./values.yaml
+  args:
+    chdir: /tmp/{{ instance.name }}/
+  when: instance.state == 'upgraded'
+
+- name: helm purge
+  shell: helm delete --purge "{{ instance.name }}"
+  when: instance.state == 'purged'
+
+- name: delete namespace
+  k8s:
+    name: "{{ instance.namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: absent
+  when: instance.state == 'purged'
+
+- name: clean
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+  - "/tmp/{{instance.name }}-{{ instance.version }}.tgz"
+  - /tmp/{{ instance.name }}

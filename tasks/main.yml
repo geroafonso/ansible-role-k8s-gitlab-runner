@@ -1,3 +1,8 @@
 ---
-# tasks file for m7s_gitlab_runner
 
+- name: Execute gitlab runner chart
+  include_tasks: chart-install.yml
+  vars:
+    instance: "{{ item }}"
+  loop: "{{ m7s_gitlab_runner }}"
+  when: m7s_gitlab_runner_enabled == true  

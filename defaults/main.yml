@@ -1,2 +1,5 @@
 ---
 # defaults file for m7s_gitlab_runner
+
+m7s_gitlab_runner_enabled: false
+m7s_gitlab_runner: []
