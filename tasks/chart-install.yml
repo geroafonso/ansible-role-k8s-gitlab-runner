@@ -18,25 +18,30 @@
     msg: "El namespace {{ instance.namespace }} ya existe."
   when: (namespace_output.resources | length > 0) and instance.state == 'installed'
 
+- name: add gitlab repo
+  shell: helm repo add gitlab https://charts.gitlab.io/
+  args:
+    chdir: /tmp/
+
 - name: get chart
-  shell: helm fetch stable/gitlab-runner --version "{{ instance.version }}"
+  shell: helm fetch gitlab/gitlab-runner --version "{{ instance.version }}"
   args:
     chdir: /tmp/
 
 - name: ensure directory exists
   file:
-    path: "/tmp/{{ instance.name }}"
+    path: "/tmp/gitlab-runner-{{ instance.version }}"
     state: directory
 
 - name: unarchive chart
   unarchive:
-    src: "/tmp/{{ instance.name }}-{{ instance.version }}.tgz"
-    dest: "/tmp/{{ instance.name }}"
+    src: "/tmp/gitlab-runner-{{ instance.version }}.tgz"
+    dest: "/tmp/gitlab-runner-{{ instance.version }}"
     extra_opts: [--strip-components=1]
     remote_src: yes
 
 - name: get default values.yaml
-  shell: cat /tmp/{{ instance.name }}/values.yaml | egrep -v "^\s*#"
+  shell: cat /tmp/gitlab-runner-{{ instance.version }}/values.yaml | egrep -v "^\s*#"
   register: values_original
 
 - name: combine values
@@ -45,25 +50,25 @@
 
 - name: delete original values.yaml
   file:
-    path: /tmp/{{ instance.name }}/values.yaml
+    path: /tmp/gitlab-runner-{{ instance.version }}/values.yaml
     state: absent
 
 - name: replace values.yml
   blockinfile:
-    path: /tmp/{{ instance.name }}/values.yaml
+    path: /tmp/gitlab-runner-{{ instance.version }}/values.yaml
     create: yes
     block: "{{ values_modified | to_nice_yaml(width=80, indent=2) }}"
 
 - name: helm install
   shell: helm install ./ --namespace "{{ instance.namespace }}" --name "{{ instance.name }}" -f ./values.yaml 
   args:
-    chdir: /tmp/{{ instance.name }}/
+    chdir: "/tmp/gitlab-runner-{{ instance.version }}/"
   when: instance.state == 'installed'
 
 - name: helm upgrade
   shell: helm upgrade "{{ instance.name }}" ./ -f ./values.yaml
   args:
-    chdir: /tmp/{{ instance.name }}/
+    chdir: "/tmp/gitlab-runner-{{ instance.version }}/"
   when: instance.state == 'upgraded'
 
 - name: helm purge
